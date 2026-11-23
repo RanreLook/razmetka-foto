@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Photo Markup</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#1d2227">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Markup">
+
+<style>
+:root{
+  /* Layout: slim top bar, full-bleed canvas, tool panel pinned to the bottom. One dark world so annotation colors read on any photo. */
+  --bg:#14171a; --panel:#1d2227; --raised:#262d33; --line:#2e353c;
+  --ink:#eef2f5; --mute:#97a3ad; --accent:#5ac8fa; --on-accent:#06222e;
+  --sans:-apple-system,system-ui,"Segoe UI",Roboto,Arial,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font:15px/1.3 var(--sans);overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none}
+#app{display:flex;flex-direction:column;height:100%}
+header{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+.spacer{flex:1}
+.btn{min-height:44px;min-width:44px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:10px;border:1px solid var(--line);background:var(--raised);color:var(--ink);font:inherit;font-weight:600;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:transparent;color:var(--on-accent)}
+.btn:disabled{opacity:.4}
+.btn:focus-visible,.tool:focus-visible,.sw:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.pick{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+
+#wrap{position:relative;flex:1;min-height:0;background:#0c0e10}
+#cv{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block}
+#hint{position:absolute;left:12px;right:12px;top:10px;display:flex;align-items:center;gap:10px;padding:8px 8px 8px 14px;border-radius:12px;background:rgba(20,23,26,.9);border:1px solid var(--line);font-size:13px}
+#hint[hidden]{display:none}
+#hint span{flex:1}
+#tip,#toast{position:absolute;left:12px;right:12px;text-align:center;pointer-events:none;font-size:12px}
+#tip{bottom:8px;color:#fff;text-shadow:0 1px 3px #000,0 0 6px #000}
+#toast{bottom:40px}
+#toast b{display:inline-block;padding:8px 14px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-weight:600}
+#toast[hidden]{display:none}
+
+footer{display:flex;flex-direction:column;gap:8px;padding:8px 10px 10px;background:var(--panel);border-top:1px solid var(--line)}
+.tools{display:flex;gap:4px;overflow-x:auto}
+.tool{flex:1 0 40px;min-height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:4px 2px;border-radius:10px;border:0;background:transparent;color:var(--mute);font:600 11px var(--sans);cursor:pointer}
+.tool[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+.row{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.swatches{display:flex;gap:6px}
+.sw{width:30px;height:30px;border-radius:50%;border:2px solid #fff3;padding:0;cursor:pointer}
+.sw[aria-pressed="true"]{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--accent)}
+.acts{display:flex;gap:4px}
+.acts .btn{padding:0;width:42px;min-width:42px}
+.sliders{display:flex;gap:14px}
+.sl{flex:1;display:flex;flex-direction:column;gap:2px;font-size:11px;font-weight:600;color:var(--mute)}
+.sl input{width:100%;height:28px;margin:0;accent-color:var(--accent)}
+
+.modal{position:fixed;inset:0;z-index:10;display:flex;align-items:flex-start;justify-content:center;padding:max(12px,7%) 12px;background:rgba(0,0,0,.62)}
+.modal[hidden]{display:none}
+.card{width:100%;max-width:420px;max-height:100%;overflow:auto;display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:16px;background:var(--panel);border:1px solid var(--line)}
+.card h2{margin:0;font-size:17px;text-wrap:balance}
+.card input[type=text]{width:100%;height:50px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:#101316;color:var(--ink);font:600 18px var(--sans);-webkit-user-select:text;user-select:text}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{min-width:44px;min-height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--raised);color:var(--ink);font:600 16px var(--sans);cursor:pointer}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btns .btn{flex:1}
+#outimg{width:100%;max-height:60vh;object-fit:contain;border-radius:10px;background:#000;-webkit-user-select:auto;user-select:auto;-webkit-touch-callout:default}
+.note{margin:0;color:var(--mute);font-size:14px}
+.langsel{appearance:none;-webkit-appearance:none;min-width:56px;padding:0 10px;text-align:center;text-align-last:center}
+.fab{position:absolute;right:12px;bottom:56px;padding:0;box-shadow:0 2px 10px rgba(0,0,0,.45)}
+.fab[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+#cropBtn{right:64px}
+body.cropping #cropBtn{display:none}
+.cropbar{position:absolute;left:12px;right:68px;bottom:44px;display:flex;gap:8px}
+.cropbar[hidden]{display:none}
+.cropbar .btn{flex:1}
+@media (prefers-reduced-motion:no-preference){.btn,.tool{transition:background .12s}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <label class="btn primary" for="file" id="pickBtn">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10.5" r="1.8"/><path d="M21 16l-5-5-8 8"/></svg>
+      <span data-i18n="photo">Photo</span>
+    </label>
+    <input class="pick" type="file" id="file" accept="image/*">
+    <span class="spacer"></span>
+    <select class="btn langsel" id="lang" aria-label="Language" title="Language"><option value="en">EN</option><option value="ru">RU</option><option value="kk">KZ</option></select>
+    <button class="btn" id="undo" type="button" data-i18n-aria="undo" aria-label="Undo" title="Undo"><svg class="i" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg></button>
+    <button class="btn primary" id="save" type="button" data-i18n="save">Save</button>
+  </header>
+
+  <div id="wrap">
+    <canvas id="cv"></canvas>
+    <div id="hint">
+      <span data-i18n="hint">This is a sample. Load your own photo from the gallery.</span>
+      <label class="btn primary" for="file" style="min-height:40px" data-i18n="choose">Choose</label>
+    </div>
+    <div id="toast" hidden><b id="toastT"></b></div>
+    <div id="tip"></div>
+    <div class="cropbar" id="cropbar" hidden>
+      <button class="btn" id="cropCancel" type="button" data-i18n="d_cancel">Cancel</button>
+      <button class="btn primary" id="cropOk" type="button" data-i18n="c_apply">Apply</button>
+    </div>
+    <button class="btn fab" id="cropBtn" type="button" aria-pressed="false" data-i18n-aria="crop" aria-label="Crop" title="Crop"><svg class="i" viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 002 2h14M2 6h14a2 2 0 012 2v14"/></svg></button>
+    <button class="btn fab" id="fitBtn" type="button" data-i18n-aria="fit" aria-label="Fit to screen" title="Fit to screen"><svg class="i" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+
+  <footer>
+    <div class="tools" role="toolbar" aria-label="Инструменты">
+      <button class="tool" type="button" data-tool="select" aria-pressed="true"><svg class="i" viewBox="0 0 24 24"><path d="M6 3l12 8-5.5 1.5L9.5 19z"/></svg><span data-i18n="t_select">Select</span></button>
+      <button class="tool" type="button" data-tool="arrow" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><path d="M5 19L19 5M19 5h-8M19 5v8"/></svg><span data-i18n="t_arrow">Arrow</span></button>
+      <button class="tool" type="button" data-tool="dim" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><path d="M3 12h18M3 7v10M21 7v10M7 12l3-3M7 12l3 3M17 12l-3-3M17 12l-3 3"/></svg><span data-i18n="t_dim">Size</span></button>
+      <button class="tool" type="button" data-tool="line" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><path d="M4 19L20 5"/></svg><span data-i18n="t_line">Line</span></button>
+      <button class="tool" type="button" data-tool="rect" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1.5"/></svg><span data-i18n="t_rect">Box</span></button>
+      <button class="tool" type="button" data-tool="ellipse" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="9" ry="6.5"/></svg><span data-i18n="t_ellipse">Oval</span></button>
+      <button class="tool" type="button" data-tool="text" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></svg><span data-i18n="t_text">Text</span></button>
+      <button class="tool" type="button" data-tool="pen" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z"/></svg><span data-i18n="t_pen">Draw</span></button>
+    </div>
+
+    <div class="row">
+      <div class="swatches" role="group" aria-label="Цвет">
+        <button class="sw" type="button" data-c="#ff3b30" style="background:#ff3b30" data-i18n-aria="c_red" aria-label="Red" aria-pressed="true"></button>
+        <button class="sw" type="button" data-c="#ffd60a" style="background:#ffd60a" data-i18n-aria="c_yellow" aria-label="Yellow" aria-pressed="false"></button>
+        <button class="sw" type="button" data-c="#30d158" style="background:#30d158" data-i18n-aria="c_green" aria-label="Green" aria-pressed="false"></button>
+        <button class="sw" type="button" data-c="#0a84ff" style="background:#0a84ff" data-i18n-aria="c_blue" aria-label="Blue" aria-pressed="false"></button>
+        <button class="sw" type="button" data-c="#ffffff" style="background:#ffffff" data-i18n-aria="c_white" aria-label="White" aria-pressed="false"></button>
+        <button class="sw" type="button" data-c="#111111" style="background:#111111" data-i18n-aria="c_black" aria-label="Black" aria-pressed="false"></button>
+      </div>
+      <span class="spacer"></span>
+      <div class="acts">
+        <button class="btn" id="aText" type="button" data-i18n-aria="a_text" aria-label="Edit label" title="Edit label" disabled><svg class="i" viewBox="0 0 24 24"><path d="M4 18l4-12 4 12M5.5 14h5M15 18v-6a3 3 0 016 0v6M15 15h6"/></svg></button>
+        <button class="btn" id="aDup" type="button" data-i18n-aria="a_dup" aria-label="Duplicate" title="Duplicate" disabled><svg class="i" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2"/></svg></button>
+        <button class="btn" id="aDel" type="button" data-i18n-aria="a_del" aria-label="Delete" title="Delete" disabled><svg class="i" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
+      </div>
+    </div>
+
+    <div class="sliders">
+      <label class="sl"><span data-i18n="s_lw">Line width</span><input type="range" id="lw" min="2" max="24" value="7"></label>
+      <label class="sl"><span data-i18n="s_fs">Text size</span><input type="range" id="fs" min="16" max="100" value="40"></label>
+    </div>
+  </footer>
+</div>
+
+<div class="modal" id="dlg" hidden>
+  <form class="card" id="dform" autocomplete="off">
+    <h2 id="dtitle">Label</h2>
+    <input type="text" id="dinp" enterkeyhint="done" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-i18n-ph="ph" placeholder="e.g. 120 mm" data-i18n-aria="d_aria" aria-label="Label text">
+    <div class="chips" id="chips">
+      <button class="chip" type="button" data-u="u_mm" data-i18n="u_mm">mm</button>
+      <button class="chip" type="button" data-u="u_cm" data-i18n="u_cm">cm</button>
+      <button class="chip" type="button" data-u="u_m" data-i18n="u_m">m</button>
+      <button class="chip" type="button" data-ch="Ø">Ø</button>
+      <button class="chip" type="button" data-ch="°">°</button>
+      <button class="chip" type="button" data-ch="±">±</button>
+      <button class="chip" type="button" data-ch="×">×</button>
+      <button class="chip" type="button" data-ch=" " data-i18n="space">space</button>
+    </div>
+    <div class="btns">
+      <button class="btn primary" type="submit" data-i18n="d_ok">Done</button>
+      <button class="btn" type="button" id="dclear" data-i18n="d_clear">Remove label</button>
+      <button class="btn" type="button" id="dcancel" data-i18n="d_cancel">Cancel</button>
+    </div>
+  </form>
+</div>
+
+<div class="modal" id="out" hidden>
+  <div class="card">
+    <h2 data-i18n="o_title">Finished photo</h2>
+    <img id="outimg" data-i18n-alt="o_alt" alt="Photo with markup">
+    <p class="note" data-i18n="o_note">Press and hold the photo, then choose “Save to Photos”.</p>
+    <div class="btns"><button class="btn primary" type="button" id="outclose" data-i18n="o_close">Close</button></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const cv = $('#cv'), ctx = cv.getContext('2d'), wrap = $('#wrap');
+  const I18N = {
+    en: {
+      photo: "Photo", save: "Save", hint: "This is a sample. Load your own photo from the gallery.", choose: "Choose",
+      undo: "Undo", fit: "Fit to screen", crop: "Crop", c_apply: "Apply",
+      t_select: "Select", t_arrow: "Arrow", t_dim: "Size", t_line: "Line", t_rect: "Box", t_ellipse: "Oval", t_text: "Text", t_pen: "Draw",
+      c_red: "Red", c_yellow: "Yellow", c_green: "Green", c_blue: "Blue", c_white: "White", c_black: "Black",
+      a_text: "Edit label", a_dup: "Duplicate", a_del: "Delete", s_lw: "Line width", s_fs: "Text size",
+      tip_select: "Tap an item to select it. Double-tap to edit its label. Pinch with two fingers to zoom.",
+      tip_arrow: "Drag from the tail of the arrow to its tip.",
+      tip_dim: "Drag along the part you are measuring, then type the value.",
+      tip_line: "Drag to draw a line.",
+      tip_rect: "Drag around the area, then type a label for it.",
+      tip_ellipse: "Drag around the area, then type a label for it.",
+      tip_text: "Tap where you want the text.",
+      tip_pen: "Draw with your finger.",
+      tip_crop: "Drag the corners or edges to choose what to keep, then tap Apply.",
+      ti_dim: "Dimension", ti_text: "Text", ti_rect: "Label under shape", ti_ellipse: "Label under shape", ti_arrow: "Label by arrow", ti_line: "Label by line",
+      ph: "e.g. 120 mm", d_aria: "Label text", d_ok: "Done", d_clear: "Remove label", d_cancel: "Cancel",
+      u_mm: "mm", u_cm: "cm", u_m: "m", space: "space",
+      o_title: "Finished photo", o_alt: "Photo with markup", o_note: "Press and hold the photo, then choose “Save to Photos”.", o_close: "Close",
+      err_open: "Could not open this file. Choose a JPG or PNG photo.", err_export: "Could not build the image. Try again.", saved: "Done. The file was sent to be saved.",
+      sm_len: "1250 mm", sm_dia: "Ø 95 mm", sm_thread: "Thread", sm_seal: "Seal"
+    },
+    ru: {
+      photo: "Фото", save: "Сохранить", hint: "Это пример. Загрузите своё фото из галереи.", choose: "Выбрать",
+      undo: "Отменить", fit: "Показать целиком", crop: "Обрезать", c_apply: "Применить",
+      t_select: "Выбор", t_arrow: "Стрелка", t_dim: "Размер", t_line: "Линия", t_rect: "Рамка", t_ellipse: "Овал", t_text: "Текст", t_pen: "Кисть",
+      c_red: "Красный", c_yellow: "Жёлтый", c_green: "Зелёный", c_blue: "Синий", c_white: "Белый", c_black: "Чёрный",
+      a_text: "Изменить подпись", a_dup: "Дублировать", a_del: "Удалить", s_lw: "Толщина линии", s_fs: "Размер текста",
+      tip_select: "Коснитесь элемента, чтобы выбрать. Двойное касание меняет подпись. Двумя пальцами меняйте масштаб.",
+      tip_arrow: "Проведите пальцем от начала стрелки к острию.",
+      tip_dim: "Проведите вдоль размера, затем введите значение.",
+      tip_line: "Проведите пальцем, чтобы провести линию.",
+      tip_rect: "Обведите область, затем напишите подпись под ней.",
+      tip_ellipse: "Обведите область, затем напишите подпись под ней.",
+      tip_text: "Коснитесь места, куда поставить текст.",
+      tip_pen: "Рисуйте пальцем.",
+      tip_crop: "Тяните углы или края, чтобы выбрать, что оставить, затем нажмите «Применить».",
+      ti_dim: "Размер", ti_text: "Текст", ti_rect: "Подпись под фигурой", ti_ellipse: "Подпись под фигурой", ti_arrow: "Подпись у стрелки", ti_line: "Подпись у линии",
+      ph: "Например: 120 мм", d_aria: "Текст подписи", d_ok: "Готово", d_clear: "Убрать подпись", d_cancel: "Отмена",
+      u_mm: "мм", u_cm: "см", u_m: "м", space: "пробел",
+      o_title: "Готовое фото", o_alt: "Фото с разметкой", o_note: "Нажмите на фото и удерживайте палец, затем выберите «Сохранить в Фото».", o_close: "Закрыть",
+      err_open: "Не удалось открыть этот файл. Выберите фото в формате JPG или PNG.", err_export: "Не удалось собрать картинку. Попробуйте ещё раз.", saved: "Готово. Файл отправлен на сохранение.",
+      sm_len: "1250 мм", sm_dia: "Ø 95 мм", sm_thread: "Резьба", sm_seal: "Уплотнение"
+    },
+    kk: {
+      photo: "Сурет", save: "Сақтау", hint: "Бұл үлгі. Галереядан өз суретіңізді жүктеңіз.", choose: "Таңдау",
+      undo: "Болдырмау", fit: "Толық көрсету", crop: "Қию", c_apply: "Қолдану",
+      t_select: "Таңдау", t_arrow: "Көрсеткі", t_dim: "Өлшем", t_line: "Сызық", t_rect: "Жақтау", t_ellipse: "Сопақша", t_text: "Мәтін", t_pen: "Сызу",
+      c_red: "Қызыл", c_yellow: "Сары", c_green: "Жасыл", c_blue: "Көк", c_white: "Ақ", c_black: "Қара",
+      a_text: "Жазуды өзгерту", a_dup: "Көшірме жасау", a_del: "Жою", s_lw: "Сызық қалыңдығы", s_fs: "Мәтін өлшемі",
+      tip_select: "Элементті таңдау үшін оған тиіңіз. Екі рет тисеңіз, жазуды өзгертуге болады. Екі саусақпен масштабты өзгертіңіз.",
+      tip_arrow: "Саусағыңызды көрсеткінің басынан ұшына қарай жүргізіңіз.",
+      tip_dim: "Өлшем бойымен саусағыңызды жүргізіп, мәнін енгізіңіз.",
+      tip_line: "Сызық сызу үшін саусағыңызды жүргізіңіз.",
+      tip_rect: "Аймақты белгілеп, астына жазу жазыңыз.",
+      tip_ellipse: "Аймақты белгілеп, астына жазу жазыңыз.",
+      tip_text: "Мәтін қойылатын жерге тиіңіз.",
+      tip_pen: "Саусағыңызбен сызыңыз.",
+      tip_crop: "Қалдыратын аймақты бұрыштарынан немесе жиектерінен сүйреп таңдап, «Қолдану» түймесін басыңыз.",
+      ti_dim: "Өлшем", ti_text: "Мәтін", ti_rect: "Фигура астындағы жазу", ti_ellipse: "Фигура астындағы жазу", ti_arrow: "Көрсеткі жанындағы жазу", ti_line: "Сызық жанындағы жазу",
+      ph: "Мысалы: 120 мм", d_aria: "Жазу мәтіні", d_ok: "Дайын", d_clear: "Жазуды алып тастау", d_cancel: "Бас тарту",
+      u_mm: "мм", u_cm: "см", u_m: "м", space: "бос орын",
+      o_title: "Дайын сурет", o_alt: "Белгіленген сурет", o_note: "Суретті басып тұрыңыз да, «Фотоға сақтау» таңдаңыз.", o_close: "Жабу",
+      err_open: "Бұл файлды ашу мүмкін болмады. JPG немесе PNG форматындағы суретті таңдаңыз.", err_export: "Суретті жинау мүмкін болмады. Қайталап көріңіз.", saved: "Дайын. Файл сақтауға жіберілді.",
+      sm_len: "1250 мм", sm_dia: "Ø 95 мм", sm_thread: "Бұранда", sm_seal: "Тығыздағыш"
+    }
+  };
+  let lang = 'en';
+  try { const sv = localStorage.getItem('pm-lang'); if (sv && I18N[sv]) lang = sv; } catch (_) {}
+  const t = k => (I18N[lang] && I18N[lang][k] != null) ? I18N[lang][k] : (I18N.en[k] != null ? I18N.en[k] : k);
+  function applyLang() {
+    document.documentElement.lang = lang;
+    document.querySelectorAll('[data-i18n]').forEach(e => { e.textContent = t(e.dataset.i18n); });
+    document.querySelectorAll('[data-i18n-aria]').forEach(e => {
+      const v = t(e.dataset.i18nAria); e.setAttribute('aria-label', v); if (e.hasAttribute('title')) e.setAttribute('title', v);
+    });
+    document.querySelectorAll('[data-i18n-ph]').forEach(e => { e.setAttribute('placeholder', t(e.dataset.i18nPh)); });
+    document.querySelectorAll('[data-i18n-alt]').forEach(e => { e.setAttribute('alt', t(e.dataset.i18nAlt)); });
+    $('#lang').value = lang;
+  }
+  const FONT = n => `700 ${n}px -apple-system,system-ui,"Segoe UI",Roboto,Arial,sans-serif`;
+
+  let base = null, W = 1600, H = 1000, U = 1.6, isSample = true;
+  let objs = [], sel = -1, tool = 'select', draft = null, crop = null;
+  let color = '#ff3b30', lwv = 7, fsv = 40;
+  let view = { s: 1, x: 0, y: 0 }, fitS = 1, autoFit = true;
+  let cw = 0, ch = 0, dpr = 1, raf = 0;
+  let hist = [];
+  const ptrs = new Map();
+  let mode = null, gesture = null, down = null, pendingSnap = null, lastTap = { t: 0, i: -1 };
+  let dlg = null, dl = null, toastTimer = 0, outUrl = '';
+
+  /* ---------- helpers ---------- */
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const req = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; draw(); }); };
+  const pos = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  const toImg = p => ({ x: (p.x - view.x) / view.s, y: (p.y - view.y) / view.s });
+  const lum = hex => { const n = parseInt(hex.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; };
+  const halo = hex => lum(hex) > 0.55 ? 'rgba(0,0,0,.78)' : 'rgba(255,255,255,.92)';
+  const snapJSON = () => JSON.stringify(objs);
+  const pushHist = s => { hist.push(s); if (hist.length > 60) hist.shift(); };
+  const hasHandles = o => ['line', 'arrow', 'dim', 'rect', 'ellipse'].includes(o.t);
+  function toast(t) {
+    $('#toastT').textContent = t; $('#toast').hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('#toast').hidden = true; }, 2600);
+  }
+
+  /* ---------- drawing ---------- */
+  function seg(c, x1, y1, x2, y2) { c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke(); }
+  function head(c, a, tx, ty, h) {
+    const w = h * 0.42, bx = tx - Math.cos(a) * h, by = ty - Math.sin(a) * h;
+    c.beginPath(); c.moveTo(tx, ty);
+    c.lineTo(bx - Math.sin(a) * w, by + Math.cos(a) * w);
+    c.lineTo(bx + Math.sin(a) * w, by - Math.cos(a) * w);
+    c.closePath(); c.fill();
+  }
+  function labelBox(c, o) {
+    const fs = o.fs * U, lw = o.lw * U;
+    c.save(); c.font = FONT(fs); const w = c.measureText(o.s).width; c.restore();
+    const h = fs * 1.2, gap = fs * 0.25 + lw / 2;
+    let cx, cy;
+    if (o.t === 'text') { cx = o.x1 + w / 2; cy = o.y1 + h / 2; }
+    else if (o.t === 'rect' || o.t === 'ellipse') { cx = (o.x1 + o.x2) / 2; cy = Math.max(o.y1, o.y2) + gap + h / 2; }
+    else {
+      const mx = (o.x1 + o.x2) / 2, my = (o.y1 + o.y2) / 2, dx = o.x2 - o.x1, dy = o.y2 - o.y1, len = Math.hypot(dx, dy);
+      let nx = 0, ny = -1;
+      if (len > 0) { nx = dy / len; ny = -dx / len; if (ny > 0 || (ny === 0 && nx < 0)) { nx = -nx; ny = -ny; } }
+      const off = Math.abs(nx) * (w / 2 + gap) + Math.abs(ny) * (h / 2 + gap);
+      cx = mx + nx * off; cy = my + ny * off;
+    }
+    if (o.t !== 'text') {
+      if (w <= W) cx = clamp(cx, w / 2, W - w / 2);
+      if (h <= H) cy = clamp(cy, h / 2, H - h / 2);
+    }
+    return { cx, cy, w, h };
+  }
+  function drawLabel(c, o) {
+    const b = labelBox(c, o), fs = o.fs * U;
+    c.save();
+    c.font = FONT(fs); c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineJoin = 'round';
+    c.lineWidth = fs * 0.3; c.strokeStyle = halo(o.c); c.strokeText(o.s, b.cx, b.cy);
+    c.fillStyle = o.c; c.fillText(o.s, b.cx, b.cy);
+    c.restore();
+  }
+  function drawObj(c, o) {
+    const lw = o.lw * U, hl = lw * 3.2 + 10 * U;
+    c.save();
+    c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = o.c; c.fillStyle = o.c; c.lineWidth = lw;
+    const dx = o.x2 - o.x1, dy = o.y2 - o.y1, L = Math.hypot(dx, dy), a = Math.atan2(dy, dx), ux = Math.cos(a), uy = Math.sin(a);
+    if (o.t === 'line') seg(c, o.x1, o.y1, o.x2, o.y2);
+    else if (o.t === 'arrow') {
+      const h = Math.min(hl, L * 0.6);
+      seg(c, o.x1, o.y1, o.x2 - ux * h * 0.7, o.y2 - uy * h * 0.7);
+      head(c, a, o.x2, o.y2, h);
+    } else if (o.t === 'dim') {
+      const h = Math.min(hl, L * 0.3);
+      seg(c, o.x1 + ux * h * 0.7, o.y1 + uy * h * 0.7, o.x2 - ux * h * 0.7, o.y2 - uy * h * 0.7);
+      head(c, a, o.x2, o.y2, h); head(c, a + Math.PI, o.x1, o.y1, h);
+      c.lineWidth = lw * 0.7; const t = hl * 0.7;
+      seg(c, o.x1 - uy * t, o.y1 + ux * t, o.x1 + uy * t, o.y1 - ux * t);
+      seg(c, o.x2 - uy * t, o.y2 + ux * t, o.x2 + uy * t, o.y2 - ux * t);
+    } else if (o.t === 'rect') {
+      c.strokeRect(Math.min(o.x1, o.x2), Math.min(o.y1, o.y2), Math.abs(dx), Math.abs(dy));
+    } else if (o.t === 'ellipse') {
+      c.beginPath(); c.ellipse((o.x1 + o.x2) / 2, (o.y1 + o.y2) / 2, Math.abs(dx) / 2, Math.abs(dy) / 2, 0, 0, Math.PI * 2); c.stroke();
+    } else if (o.t === 'pen') {
+      c.beginPath();
+      o.pts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1]));
+      if (o.pts.length === 1) c.lineTo(o.pts[0][0], o.pts[0][1]);
+      c.stroke();
+    }
+    c.restore();
+    if (o.s) drawLabel(c, o);
+  }
+  function bbox(o) {
+    if (o.t === 'text') { const b = labelBox(ctx, o); return [b.cx - b.w / 2, b.cy - b.h / 2, b.cx + b.w / 2, b.cy + b.h / 2]; }
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    o.pts.forEach(p => { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); });
+    return [x0, y0, x1, y1];
+  }
+  function drawSel(c, o) {
+    const k = 1 / view.s;
+    c.save();
+    c.lineWidth = 2 * k; c.strokeStyle = '#5ac8fa'; c.setLineDash([6 * k, 5 * k]);
+    if (o.t === 'text' || o.t === 'pen') {
+      const b = bbox(o), p = 6 * k;
+      c.strokeRect(b[0] - p, b[1] - p, b[2] - b[0] + 2 * p, b[3] - b[1] + 2 * p);
+    } else if (o.s) {
+      const b = labelBox(c, o), p = 4 * k;
+      c.strokeRect(b.cx - b.w / 2 - p, b.cy - b.h / 2 - p, b.w + 2 * p, b.h + 2 * p);
+    }
+    c.setLineDash([]);
+    if (hasHandles(o)) {
+      [[o.x1, o.y1], [o.x2, o.y2]].forEach(([x, y]) => {
+        c.beginPath(); c.arc(x, y, 9 * k, 0, Math.PI * 2);
+        c.fillStyle = '#fff'; c.fill(); c.lineWidth = 3 * k; c.strokeStyle = '#5ac8fa'; c.stroke();
+      });
+    }
+    c.restore();
+  }
+  function draw() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#0c0e10'; ctx.fillRect(0, 0, cw, ch);
+    if (!base) return;
+    ctx.save();
+    ctx.translate(view.x, view.y); ctx.scale(view.s, view.s);
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(base, 0, 0);
+    objs.forEach(o => drawObj(ctx, o));
+    if (draft) drawObj(ctx, draft);
+    if (sel >= 0 && objs[sel]) drawSel(ctx, objs[sel]);
+    if (crop) drawCrop(ctx);
+    ctx.restore();
+  }
+
+  /* ---------- crop ---------- */
+  const CROP_ORDER = ['nw', 'ne', 'se', 'sw', 'n', 'e', 's', 'w'];
+  function cropPts() {
+    const r = crop, mx = (r.x0 + r.x1) / 2, my = (r.y0 + r.y1) / 2;
+    return { nw: [r.x0, r.y0], n: [mx, r.y0], ne: [r.x1, r.y0], e: [r.x1, my], se: [r.x1, r.y1], s: [mx, r.y1], sw: [r.x0, r.y1], w: [r.x0, my] };
+  }
+  function drawCrop(c) {
+    const k = 1 / view.s, r = crop;
+    c.save();
+    c.fillStyle = 'rgba(0,0,0,.58)';
+    c.fillRect(0, 0, W, r.y0); c.fillRect(0, r.y1, W, H - r.y1);
+    c.fillRect(0, r.y0, r.x0, r.y1 - r.y0); c.fillRect(r.x1, r.y0, W - r.x1, r.y1 - r.y0);
+    c.strokeStyle = 'rgba(255,255,255,.45)'; c.lineWidth = k;
+    for (let i = 1; i < 3; i++) {
+      const gx = r.x0 + (r.x1 - r.x0) * i / 3, gy = r.y0 + (r.y1 - r.y0) * i / 3;
+      seg(c, gx, r.y0, gx, r.y1); seg(c, r.x0, gy, r.x1, gy);
+    }
+    c.strokeStyle = '#fff'; c.lineWidth = 2 * k; c.strokeRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+    const pts = cropPts();
+    CROP_ORDER.forEach(n => {
+      const q = pts[n], rad = (n.length === 2 ? 10 : 7) * k;
+      c.beginPath(); c.arc(q[0], q[1], rad, 0, Math.PI * 2);
+      c.fillStyle = '#fff'; c.fill(); c.lineWidth = 3 * k; c.strokeStyle = '#5ac8fa'; c.stroke();
+    });
+    c.restore();
+  }
+  function cropHit(p) {
+    const pts = cropPts(); let best = null, bd = 30;
+    CROP_ORDER.forEach(n => {
+      const d = Math.hypot(p.x - (pts[n][0] * view.s + view.x), p.y - (pts[n][1] * view.s + view.y));
+      if (d < bd) { bd = d; best = n; }
+    });
+    return best;
+  }
+  function dragCrop(h, q) {
+    const r = crop, min = 24 * U, x = clamp(q.x, 0, W), y = clamp(q.y, 0, H);
+    if (h.includes('w')) r.x0 = Math.min(x, r.x1 - min);
+    if (h.includes('e')) r.x1 = Math.max(x, r.x0 + min);
+    if (h.includes('n')) r.y0 = Math.min(y, r.y1 - min);
+    if (h.includes('s')) r.y1 = Math.max(y, r.y0 + min);
+  }
+  function moveCrop(q, m) {
+    const r = crop, w = r.x1 - r.x0, h = r.y1 - r.y0;
+    const nx = clamp(r.x0 + q.x - m.last.x, 0, W - w), ny = clamp(r.y0 + q.y - m.last.y, 0, H - h);
+    r.x0 = nx; r.x1 = nx + w; r.y0 = ny; r.y1 = ny + h; m.last = q;
+  }
+  function enterCrop() {
+    if (!base) return;
+    tool = 'crop'; sel = -1; draft = null;
+    crop = { x0: W * 0.08, y0: H * 0.08, x1: W * 0.92, y1: H * 0.92 };
+    $('#cropbar').hidden = false; syncUI(); req();
+  }
+  function exitCrop() {
+    crop = null; tool = 'select'; $('#cropbar').hidden = true; syncUI(); req();
+  }
+  function applyCrop() {
+    const r = crop;
+    const x = Math.round(r.x0), y = Math.round(r.y0), w = Math.max(1, Math.round(r.x1 - r.x0)), h = Math.max(1, Math.round(r.y1 - r.y0));
+    if (x <= 0 && y <= 0 && w >= W && h >= H) { exitCrop(); return; }
+    pushHist({ j: snapJSON(), base, W, H });
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    c.getContext('2d').drawImage(base, x, y, w, h, 0, 0, w, h);
+    objs.forEach(o => shift(o, -x, -y));
+    base = c; W = w; H = h; isSample = false;
+    crop = null; tool = 'select'; sel = -1; $('#cropbar').hidden = true;
+    fit(); syncUI();
+  }
+
+  /* ---------- view ---------- */
+  function computeFit() { fitS = Math.min(cw / W, ch / H) * 0.96; }
+  function fit() {
+    computeFit(); view.s = fitS; view.x = (cw - W * fitS) / 2; view.y = (ch - H * fitS) / 2; autoFit = true; req();
+  }
+  function resize() {
+    const r = wrap.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    cw = r.width; ch = r.height; dpr = Math.min(window.devicePixelRatio || 1, 3);
+    cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
+    computeFit(); if (autoFit) fit(); else req();
+  }
+  function zoomAt(p, f) {
+    const s = clamp(view.s * f, fitS * 0.5, fitS * 14), k = s / view.s;
+    view.x = p.x - (p.x - view.x) * k; view.y = p.y - (p.y - view.y) * k; view.s = s; autoFit = false; req();
+  }
+
+  /* ---------- photo ---------- */
+  function makeSample() {
+    const c = document.createElement('canvas'); c.width = 1600; c.height = 1000;
+    const g = c.getContext('2d');
+    const bg = g.createLinearGradient(0, 0, 0, 1000); bg.addColorStop(0, '#6f7a82'); bg.addColorStop(1, '#2d3338');
+    g.fillStyle = bg; g.fillRect(0, 0, 1600, 1000);
+    const body = g.createLinearGradient(0, 400, 0, 600);
+    body.addColorStop(0, '#dfe4e8'); body.addColorStop(.35, '#a3adb4'); body.addColorStop(.7, '#5f696f'); body.addColorStop(1, '#aab3b9');
+    g.fillStyle = body; g.fillRect(160, 400, 1040, 200);
+    g.fillStyle = '#4a5358'; g.fillRect(120, 425, 40, 150); g.fillRect(1200, 425, 40, 150);
+    g.fillStyle = 'rgba(20,24,27,.55)';
+    for (let x = 200; x < 380; x += 22) g.fillRect(x, 400, 8, 200);
+    g.fillRect(800, 400, 10, 200); g.fillRect(1000, 400, 10, 200);
+    g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(160, 600, 1040, 16);
+    base = c; W = 1600; H = 1000; U = 1.6; isSample = true;
+    objs = [
+      { t: 'dim', x1: 160, y1: 330, x2: 1200, y2: 330, c: '#ffd60a', lw: 7, fs: 44, s: t('sm_len') },
+      { t: 'dim', x1: 1290, y1: 400, x2: 1290, y2: 600, c: '#30d158', lw: 7, fs: 40, s: t('sm_dia') },
+      { t: 'arrow', x1: 440, y1: 760, x2: 300, y2: 610, c: '#ff3b30', lw: 7, fs: 40, s: t('sm_thread') },
+      { t: 'rect', x1: 800, y1: 400, x2: 1010, y2: 600, c: '#ffffff', lw: 6, fs: 40, s: t('sm_seal') }
+    ];
+  }
+  function setBase(src, w, h) {
+    const sc = Math.min(1, 3000 / Math.max(w, h));
+    const c = document.createElement('canvas');
+    c.width = Math.round(w * sc); c.height = Math.round(h * sc);
+    c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+    base = c; W = c.width; H = c.height; U = Math.max(W, H) / 1000;
+    objs = []; hist = []; sel = -1; draft = null; mode = null;
+    $('#hint').hidden = true; isSample = false;
+    fit(); syncUI();
+  }
+  $('#file').addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const url = URL.createObjectURL(f), im = new Image();
+    im.onload = () => { setBase(im, im.naturalWidth, im.naturalHeight); URL.revokeObjectURL(url); };
+    im.onerror = () => { URL.revokeObjectURL(url); toast(t('err_open')); };
+    im.src = url; e.target.value = '';
+  });
+
+  /* ---------- hit testing ---------- */
+  function distSeg(q, x1, y1, x2, y2) {
+    const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy;
+    let t = l2 ? ((q.x - x1) * dx + (q.y - y1) * dy) / l2 : 0; t = clamp(t, 0, 1);
+    return Math.hypot(q.x - (x1 + t * dx), q.y - (y1 + t * dy));
+  }
+  function hitPrecise(o, q, tol) {
+    const lw = o.lw * U / 2;
+    if (o.s) {
+      const b = labelBox(ctx, o);
+      if (Math.abs(q.x - b.cx) <= b.w / 2 + tol / 2 && Math.abs(q.y - b.cy) <= b.h / 2 + tol / 2) return true;
+    }
+    if (o.t === 'line' || o.t === 'arrow' || o.t === 'dim') return distSeg(q, o.x1, o.y1, o.x2, o.y2) <= tol + lw;
+    if (o.t === 'rect') {
+      const x0 = Math.min(o.x1, o.x2), x1 = Math.max(o.x1, o.x2), y0 = Math.min(o.y1, o.y2), y1 = Math.max(o.y1, o.y2), e = tol + lw;
+      const outer = q.x >= x0 - e && q.x <= x1 + e && q.y >= y0 - e && q.y <= y1 + e;
+      const inner = q.x > x0 + e && q.x < x1 - e && q.y > y0 + e && q.y < y1 - e;
+      return outer && !inner;
+    }
+    if (o.t === 'ellipse') {
+      const rx = Math.abs(o.x2 - o.x1) / 2, ry = Math.abs(o.y2 - o.y1) / 2;
+      if (rx < 1 || ry < 1) return false;
+      const r = Math.hypot((q.x - (o.x1 + o.x2) / 2) / rx, (q.y - (o.y1 + o.y2) / 2) / ry);
+      return Math.abs(r - 1) * Math.min(rx, ry) <= tol + lw;
+    }
+    if (o.t === 'pen') {
+      for (let i = 1; i < o.pts.length; i++) if (distSeg(q, o.pts[i - 1][0], o.pts[i - 1][1], o.pts[i][0], o.pts[i][1]) <= tol + lw) return true;
+      return o.pts.length === 1 && Math.hypot(q.x - o.pts[0][0], q.y - o.pts[0][1]) <= tol + lw;
+    }
+    return false;
+  }
+  function hitTest(q) {
+    const tol = 16 / view.s;
+    for (let i = objs.length - 1; i >= 0; i--) if (hitPrecise(objs[i], q, tol)) return i;
+    for (let i = objs.length - 1; i >= 0; i--) {
+      const o = objs[i];
+      if (o.t === 'rect' && q.x >= Math.min(o.x1, o.x2) && q.x <= Math.max(o.x1, o.x2) && q.y >= Math.min(o.y1, o.y2) && q.y <= Math.max(o.y1, o.y2)) return i;
+      if (o.t === 'ellipse') {
+        const rx = Math.abs(o.x2 - o.x1) / 2, ry = Math.abs(o.y2 - o.y1) / 2;
+        if (rx > 1 && ry > 1 && Math.hypot((q.x - (o.x1 + o.x2) / 2) / rx, (q.y - (o.y1 + o.y2) / 2) / ry) <= 1) return i;
+      }
+    }
+    return -1;
+  }
+  function handleAt(o, q) {
+    if (!hasHandles(o)) return -1;
+    const r = 24 / view.s, d1 = Math.hypot(q.x - o.x1, q.y - o.y1), d2 = Math.hypot(q.x - o.x2, q.y - o.y2);
+    if (d1 > r && d2 > r) return -1;
+    return d1 <= d2 ? 0 : 1;
+  }
+  function shift(o, dx, dy) {
+    o.x1 += dx; o.x2 += dx; o.y1 += dy; o.y2 += dy;
+    if (o.pts) o.pts.forEach(p => { p[0] += dx; p[1] += dy; });
+  }
+
+  /* ---------- pointer input ---------- */
+  function commitSnap() { if (pendingSnap) { pushHist(pendingSnap); pendingSnap = null; syncUndo(); } }
+  function startGesture() {
+    const [a, b] = [...ptrs.values()];
+    gesture = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, c: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, v: { ...view } };
+    mode = null; draft = null; pendingSnap = null;
+  }
+  function updateGesture() {
+    const [a, b] = [...ptrs.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y) || 1, c = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const s = clamp(gesture.v.s * d / gesture.d, fitS * 0.5, fitS * 14);
+    const ix = (gesture.c.x - gesture.v.x) / gesture.v.s, iy = (gesture.c.y - gesture.v.y) / gesture.v.s;
+    view.s = s; view.x = c.x - ix * s; view.y = c.y - iy * s; autoFit = false; req();
+  }
+
+  cv.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+    const p = pos(e); ptrs.set(e.pointerId, p);
+    if (ptrs.size === 2) { startGesture(); req(); return; }
+    if (ptrs.size > 2 || !base) return;
+    const q = toImg(p);
+    down = { p, moved: false };
+    if (crop) {
+      const h = cropHit(p);
+      if (h) { mode = { k: 'cropH', h }; return; }
+      if (q.x >= crop.x0 && q.x <= crop.x1 && q.y >= crop.y0 && q.y <= crop.y1) { mode = { k: 'cropM', last: q }; return; }
+      mode = { k: 'pan', last: p }; return;
+    }
+    if (tool === 'select') {
+      if (sel >= 0 && objs[sel]) {
+        const hi = handleAt(objs[sel], q);
+        if (hi >= 0) { pendingSnap = snapJSON(); mode = { k: 'handle', i: hi }; return; }
+      }
+      const idx = hitTest(q);
+      if (idx >= 0) { sel = idx; pendingSnap = snapJSON(); mode = { k: 'move', last: q }; syncUI(); req(); return; }
+      sel = -1; mode = { k: 'pan', last: p }; syncUI(); req(); return;
+    }
+    sel = -1; syncUI();
+    if (tool === 'text') { mode = { k: 'text', q }; return; }
+    draft = { t: tool, x1: q.x, y1: q.y, x2: q.x, y2: q.y, c: color, lw: lwv, fs: fsv, s: '' };
+    if (tool === 'pen') draft.pts = [[q.x, q.y]];
+    mode = { k: 'draw' }; req();
+  });
+
+  cv.addEventListener('pointermove', e => {
+    if (!ptrs.has(e.pointerId)) return;
+    const p = pos(e); ptrs.set(e.pointerId, p);
+    if (ptrs.size === 2 && gesture) { updateGesture(); return; }
+    if (!mode || !down) return;
+    if (Math.hypot(p.x - down.p.x, p.y - down.p.y) > 6) down.moved = true;
+    const q = toImg(p);
+    if (mode.k === 'move' && down.moved) {
+      commitSnap(); shift(objs[sel], q.x - mode.last.x, q.y - mode.last.y); mode.last = q;
+    } else if (mode.k === 'handle' && down.moved) {
+      commitSnap(); const o = objs[sel];
+      if (mode.i === 0) { o.x1 = q.x; o.y1 = q.y; } else { o.x2 = q.x; o.y2 = q.y; }
+    } else if (mode.k === 'cropH') {
+      dragCrop(mode.h, q);
+    } else if (mode.k === 'cropM') {
+      moveCrop(q, mode);
+    } else if (mode.k === 'pan') {
+      view.x += p.x - mode.last.x; view.y += p.y - mode.last.y; mode.last = p; autoFit = false;
+    } else if (mode.k === 'draw' && draft) {
+      if (draft.t === 'pen') {
+        const l = draft.pts[draft.pts.length - 1];
+        if (Math.hypot(q.x - l[0], q.y - l[1]) * view.s > 2) draft.pts.push([q.x, q.y]);
+      } else { draft.x2 = q.x; draft.y2 = q.y; }
+    }
+    req();
+  });
+
+  function endPointer(e, cancelled) {
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.delete(e.pointerId);
+    if (gesture) { if (ptrs.size < 2) { gesture = null; mode = null; down = null; } req(); return; }
+    const m = mode; mode = null;
+    if (cancelled) { draft = null; req(); return; }
+    if (m && m.k === 'draw' && draft) {
+      const d = draft; draft = null;
+      const len = Math.hypot(d.x2 - d.x1, d.y2 - d.y1) * view.s;
+      const ok = d.t === 'pen' ? d.pts.length > 2 : len > 10;
+      if (ok) {
+        pushHist(snapJSON()); objs.push(d); sel = objs.length - 1;
+        if (d.t === 'rect' || d.t === 'ellipse' || d.t === 'dim') openEdit(sel, true);
+      }
+    } else if (m && m.k === 'text' && down && !down.moved) {
+      openNew(m.q);
+    } else if (m && m.k === 'move' && down && !down.moved) {
+      const now = Date.now();
+      if (lastTap.i === sel && now - lastTap.t < 400 && objs[sel] && objs[sel].t !== 'pen') { lastTap = { t: 0, i: -1 }; openEdit(sel, false); }
+      else lastTap = { t: now, i: sel };
+    }
+    pendingSnap = null; down = null; syncUI(); req();
+  }
+  cv.addEventListener('pointerup', e => endPointer(e, false));
+  cv.addEventListener('pointercancel', e => endPointer(e, true));
+  cv.addEventListener('wheel', e => { e.preventDefault(); zoomAt(pos(e), Math.exp(-e.deltaY * 0.002)); }, { passive: false });
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+  document.addEventListener('gesturestart', e => e.preventDefault());
+
+  /* ---------- text dialog ---------- */
+  const inp = $('#dinp');
+  function showDlg(title, val) {
+    $('#dtitle').textContent = title; inp.value = val; $('#dlg').hidden = false;
+    inp.focus(); inp.select();
+  }
+  function openEdit(i, fresh) {
+    const o = objs[i]; if (!o || o.t === 'pen') return;
+    dlg = { obj: o, isNew: false, fresh };
+    showDlg(t('ti_' + o.t), o.s || '');
+  }
+  function openNew(q) {
+    dlg = { obj: { t: 'text', x1: q.x, y1: q.y, x2: q.x, y2: q.y, c: color, lw: lwv, fs: fsv, s: '' }, isNew: true, fresh: false };
+    showDlg(t('ti_text'), '');
+  }
+  function closeDlg() { $('#dlg').hidden = true; dlg = null; inp.blur(); syncUI(); req(); }
+  function applyDlg(v) {
+    if (!dlg) return;
+    const o = dlg.obj;
+    if (dlg.isNew) {
+      if (v) { pushHist(snapJSON()); o.s = v; objs.push(o); sel = objs.length - 1; }
+    } else if (v !== (o.s || '')) {
+      if (!dlg.fresh) pushHist(snapJSON());
+      o.s = v;
+      if (o.t === 'text' && !v) { const i = objs.indexOf(o); if (i >= 0) objs.splice(i, 1); sel = -1; }
+    }
+  }
+  $('#dform').addEventListener('submit', e => { e.preventDefault(); applyDlg(inp.value.trim()); closeDlg(); });
+  $('#dclear').addEventListener('click', () => { applyDlg(''); closeDlg(); });
+  $('#dcancel').addEventListener('click', closeDlg);
+  $('#dlg').addEventListener('pointerdown', e => { if (e.target === $('#dlg')) closeDlg(); });
+  function insertCh(ch) {
+    const s = inp.selectionStart == null ? inp.value.length : inp.selectionStart, en = inp.selectionEnd == null ? s : inp.selectionEnd;
+    inp.setRangeText(ch, s, en, 'end'); inp.focus();
+  }
+  const chipVal = b => b.dataset.u ? t(b.dataset.u) : b.dataset.ch;
+  document.querySelectorAll('.chip').forEach(b => {
+    b.addEventListener('touchstart', e => { e.preventDefault(); insertCh(chipVal(b)); }, { passive: false });
+    b.addEventListener('mousedown', e => { e.preventDefault(); insertCh(chipVal(b)); });
+    b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertCh(chipVal(b)); } });
+  });
+
+  /* ---------- controls ---------- */
+  function syncUndo() { $('#undo').disabled = !hist.length; }
+  function syncUI() {
+    document.querySelectorAll('.tool').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === tool)));
+    const o = sel >= 0 ? objs[sel] : null;
+    if (o) { color = o.c; lwv = o.lw; fsv = o.fs; $('#lw').value = lwv; $('#fs').value = fsv; }
+    document.querySelectorAll('.sw').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.c === color)));
+    $('#aText').disabled = !o || o.t === 'pen';
+    $('#aDup').disabled = !o; $('#aDel').disabled = !o;
+    $('#tip').textContent = t('tip_' + tool);
+    document.body.classList.toggle('cropping', tool === 'crop');
+    $('#cropBtn').setAttribute('aria-pressed', String(tool === 'crop'));
+    syncUndo();
+  }
+  document.querySelectorAll('.tool').forEach(b => b.addEventListener('click', () => {
+    if (crop) { crop = null; $('#cropbar').hidden = true; }
+    tool = b.dataset.tool; if (tool !== 'select') sel = -1; syncUI(); req();
+  }));
+  document.querySelectorAll('.sw').forEach(b => b.addEventListener('click', () => {
+    color = b.dataset.c;
+    if (sel >= 0 && objs[sel]) { pushHist(snapJSON()); objs[sel].c = color; }
+    syncUI(); req();
+  }));
+  let styleSnapped = false;
+  function onStyle() {
+    lwv = +$('#lw').value; fsv = +$('#fs').value;
+    if (sel >= 0 && objs[sel]) {
+      if (!styleSnapped) { pushHist(snapJSON()); styleSnapped = true; syncUndo(); }
+      objs[sel].lw = lwv; objs[sel].fs = fsv;
+    }
+    req();
+  }
+  ['lw', 'fs'].forEach(id => {
+    $('#' + id).addEventListener('input', onStyle);
+    $('#' + id).addEventListener('change', () => { styleSnapped = false; });
+  });
+  $('#aText').addEventListener('click', () => { if (sel >= 0) openEdit(sel, false); });
+  $('#aDup').addEventListener('click', () => {
+    if (sel < 0) return;
+    pushHist(snapJSON());
+    const c = JSON.parse(JSON.stringify(objs[sel])); shift(c, 30 * U, 30 * U);
+    objs.push(c); sel = objs.length - 1; syncUI(); req();
+  });
+  $('#aDel').addEventListener('click', () => {
+    if (sel < 0) return;
+    pushHist(snapJSON()); objs.splice(sel, 1); sel = -1; syncUI(); req();
+  });
+  $('#undo').addEventListener('click', () => {
+    if (!hist.length) return;
+    const e = hist.pop();
+    if (typeof e === 'string') objs = JSON.parse(e);
+    else { objs = JSON.parse(e.j); base = e.base; W = e.W; H = e.H; fit(); }
+    sel = -1; syncUI(); req();
+  });
+  $('#fitBtn').addEventListener('click', fit);
+  $('#cropBtn').addEventListener('click', enterCrop);
+  $('#cropOk').addEventListener('click', applyCrop);
+  $('#cropCancel').addEventListener('click', exitCrop);
+
+  /* ---------- export ---------- */
+  function showOut(blob) {
+    if (outUrl) URL.revokeObjectURL(outUrl);
+    outUrl = URL.createObjectURL(blob); $('#outimg').src = outUrl; $('#out').hidden = false;
+  }
+  $('#outclose').addEventListener('click', () => { $('#out').hidden = true; });
+  $('#save').addEventListener('click', () => {
+    if (!base) return;
+    const out = document.createElement('canvas'); out.width = W; out.height = H;
+    const c = out.getContext('2d');
+    c.drawImage(base, 0, 0); objs.forEach(o => drawObj(c, o));
+    out.toBlob(async blob => {
+      if (!blob) { toast(t('err_export')); return; }
+      const d = new Date(), z = n => String(n).padStart(2, '0');
+      const name = `markup-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.jpg`;
+      if (dl) {
+        try { await dl.save({ filename: name, data: blob }); toast(t('saved')); return; }
+        catch (err) { if (err && err.code === 'declined') return; }
+      }
+      showOut(blob);
+    }, 'image/jpeg', 0.92);
+  });
+  (async () => {
+    try { if (window.claude && window.claude.use) dl = await window.claude.use('downloads'); } catch (_) { dl = null; }
+  })();
+
+  /* ---------- start ---------- */
+  makeSample();
+  applyLang();
+  $('#lang').addEventListener('change', e => {
+    lang = e.target.value;
+    try { localStorage.setItem('pm-lang', lang); } catch (_) {}
+    if (isSample && !hist.length) { makeSample(); sel = -1; }
+    applyLang(); syncUI(); req();
+  });
+  syncUI();
+  new ResizeObserver(resize).observe(wrap);
+  resize();
+})();
+</script>
+<script>
+if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(()=>{});});}
+</script>
+</body>
+</html>
